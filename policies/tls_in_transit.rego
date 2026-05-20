@@ -1,17 +1,23 @@
+# ---
+# title: TLS enforcement required on S3 bucket policies
+# description: Every S3 bucket policy must deny requests where aws:SecureTransport is false. PHI transmitted over HTTP is unencrypted.
+# custom:
+#   framework: CMMC Level 2
+#   control_id: SC.L2-3.13.8
+#   severity: HIGH
+#   remediation: Add a Deny statement to the bucket policy with Condition Bool aws:SecureTransport = false.
 package main
 
-# SC.L2-3.13.8 — GAP-03
-# Every S3 bucket policy must contain a Deny statement that rejects
-# requests where aws:SecureTransport is false.
+import rego.v1
 
-has_tls_deny(policy_str) {
+has_tls_deny(policy_str) if {
     policy := json.unmarshal(policy_str)
     stmt := policy.Statement[_]
     stmt.Effect == "Deny"
     lower(stmt.Condition.Bool["aws:SecureTransport"]) == "false"
 }
 
-deny[msg] {
+deny contains msg if {
     resource := input.resource_changes[_]
     resource.type == "aws_s3_bucket_policy"
     resource.change.actions[_] != "delete"

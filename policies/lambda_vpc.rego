@@ -1,15 +1,20 @@
+# ---
+# title: Lambda functions must run inside the VPC
+# description: Lambda functions without vpc_config can reach the public internet directly, bypassing network segmentation controls on PHI traffic.
+# custom:
+#   framework: CMMC Level 2
+#   control_id: SC.L2-3.13.1
+#   severity: HIGH
+#   remediation: Add vpc_config { subnet_ids = [...] security_group_ids = [...] } to aws_lambda_function using private subnets and an egress-only security group.
 package main
 
-# SC.L2-3.13.1 — GAP-05
-# Every Lambda function must have a vpc_config block with at least one subnet
-# and one security group. A Lambda outside the VPC can reach the internet
-# directly and bypasses network segmentation controls.
+import rego.v1
 
-has_vpc_config(resource) {
+has_vpc_config(resource) if {
     resource.change.after.vpc_config[_]
 }
 
-deny[msg] {
+deny contains msg if {
     resource := input.resource_changes[_]
     resource.type == "aws_lambda_function"
     resource.change.actions[_] != "delete"
