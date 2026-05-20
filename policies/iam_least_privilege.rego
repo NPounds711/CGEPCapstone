@@ -1,10 +1,16 @@
+# ---
+# title: IAM role policies must not contain wildcard actions
+# description: Wildcard actions (service:* or bare *) in Lambda inline policies grant unintended access to PHI data stores and violate least privilege.
+# custom:
+#   framework: CMMC Level 2
+#   control_id: AC.L2-3.1.5
+#   severity: HIGH
+#   remediation: Replace wildcard actions with the minimum required set, e.g. dynamodb:PutItem, dynamodb:GetItem, s3:PutObject.
 package main
 
-# AC.L2-3.1.5 — GAP-07
-# No IAM role policy may grant a wildcard action (service:* or bare *).
-# Wildcards violate least privilege and grant unintended access to PHI stores.
+import rego.v1
 
-wildcard_in_policy(policy_str) {
+wildcard_in_policy(policy_str) if {
     policy := json.unmarshal(policy_str)
     stmt := policy.Statement[_]
     stmt.Effect == "Allow"
@@ -12,14 +18,22 @@ wildcard_in_policy(policy_str) {
     endswith(action, ":*")
 }
 
-wildcard_in_policy(policy_str) {
+wildcard_in_policy(policy_str) if {
     policy := json.unmarshal(policy_str)
     stmt := policy.Statement[_]
     stmt.Effect == "Allow"
     stmt.Action == "*"
 }
 
-deny[msg] {
+wildcard_in_policy(policy_str) if {
+    policy := json.unmarshal(policy_str)
+    stmt := policy.Statement[_]
+    stmt.Effect == "Allow"
+    is_string(stmt.Action)
+    endswith(stmt.Action, ":*")
+}
+
+deny contains msg if {
     resource := input.resource_changes[_]
     resource.type == "aws_iam_role_policy"
     resource.change.actions[_] != "delete"

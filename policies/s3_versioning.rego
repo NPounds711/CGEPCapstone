@@ -1,10 +1,16 @@
+# ---
+# title: S3 versioning must be enabled
+# description: Versioning must be Enabled on all S3 buckets that store PHI or audit evidence. Without versioning, object overwrites are unrecoverable.
+# custom:
+#   framework: CMMC Level 2
+#   control_id: MP.L2-3.8.9
+#   severity: MEDIUM
+#   remediation: Add aws_s3_bucket_versioning with versioning_configuration { status = "Enabled" }.
 package main
 
-# MP.L2-3.8.9 — GAP-04
-# Every S3 bucket versioning resource must have status = Enabled.
-# Versioning is required to recover from accidental overwrite of PHI objects.
+import rego.v1
 
-deny[msg] {
+deny contains msg if {
     resource := input.resource_changes[_]
     resource.type == "aws_s3_bucket_versioning"
     resource.change.actions[_] != "delete"
