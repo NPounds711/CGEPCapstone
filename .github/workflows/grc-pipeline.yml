@@ -1,0 +1,117 @@
+name: GRC Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  TF_VERSION: "1.6.6"
+  CONFTEST_VERSION: "0.51.0"
+
+jobs:
+  policy-gate:
+    name: Plan and OPA Policy Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        run: |
+          mkdir -p ~/.aws
+          printf "[sandbox]\naws_access_key_id=%s\naws_secret_access_key=%s\n" "${{ secrets.AWS_ACCESS_KEY_ID }}" "${{ secrets.AWS_SECRET_ACCESS_KEY }}" > ~/.aws/credentials
+          printf "[profile sandbox]\nregion=us-east-1\n" > ~/.aws/config
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: terraform
+        run: terraform plan -out=tfplan
+
+      - name: Export plan JSON
+        working-directory: terraform
+        run: terraform show -json tfplan > tfplan.json
+
+      - name: Install Conftest
+        run: |
+          curl -sL "https://github.com/open-policy-agent/conftest/releases/download/v${{ env.CONFTEST_VERSION }}/conftest_${{ env.CONFTEST_VERSION }}_Linux_x86_64.tar.gz" | tar xz
+          sudo mv conftest /usr/local/bin/
+
+      - name: OPA Policy Gate
+        run: conftest test terraform/tfplan.json --policy policies/
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-json
+          path: terraform/tfplan.json
+          retention-days: 7
+
+  apply:
+    name: Apply and Sign Evidence
+    needs: policy-gate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        run: |
+          mkdir -p ~/.aws
+          printf "[sandbox]\naws_access_key_id=%s\naws_secret_access_key=%s\n" "${{ secrets.AWS_ACCESS_KEY_ID }}" "${{ secrets.AWS_SECRET_ACCESS_KEY }}" > ~/.aws/credentials
+          printf "[profile sandbox]\nregion=us-east-1\n" > ~/.aws/config
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: terraform
+        run: terraform plan -out=tfplan
+
+      - name: Export plan JSON
+        working-directory: terraform
+        run: terraform show -json tfplan > tfplan.json
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Get vault bucket name
+        id: vault
+        working-directory: terraform
+        run: echo "bucket=$(terraform output -raw evidence_vault_bucket)" >> $GITHUB_OUTPUT
+
+      - name: Bundle evidence
+        run: tar -czf bundle.tar.gz -C terraform tfplan.json
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Sign evidence bundle
+        run: cosign sign-blob --yes --output-signature bundle.sig bundle.tar.gz
+
+      - name: Upload evidence to vault
+        run: |
+          RUN_PATH="runs/${{ github.run_id }}-${{ github.run_attempt }}"
+          aws s3 cp bundle.tar.gz "s3://${{ steps.vault.outputs.bucket }}/${RUN_PATH}/bundle.tar.gz" --profile sandbox
+          aws s3 cp bundle.sig "s3://${{ steps.vault.outputs.bucket }}/${RUN_PATH}/bundle.sig" --profile sandbox
