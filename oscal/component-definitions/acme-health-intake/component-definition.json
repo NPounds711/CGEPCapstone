@@ -1,0 +1,144 @@
+{
+  "component-definition": {
+    "uuid": "a1b2c3d4-e5f6-4789-8abc-def012345678",
+    "metadata": {
+      "title": "Acme Health Patient Intake API — CMMC Level 2 Component Definition",
+      "last-modified": "2026-05-20T00:00:00Z",
+      "version": "1.0.0",
+      "oscal-version": "1.2.1",
+      "roles": [
+        {
+          "id": "provider",
+          "title": "GRC Engineer"
+        }
+      ],
+      "parties": [
+        {
+          "uuid": "11111111-1111-4111-8111-111111111111",
+          "type": "person",
+          "name": "Nicole Pounds"
+        }
+      ],
+      "responsible-parties": [
+        {
+          "role-id": "provider",
+          "party-uuids": ["11111111-1111-4111-8111-111111111111"]
+        }
+      ]
+    },
+    "components": [
+      {
+        "uuid": "22222222-2222-4222-8222-222222222222",
+        "type": "software",
+        "title": "Acme Health Patient Intake API",
+        "description": "Serverless patient intake API running on AWS Lambda behind API Gateway v2, with DynamoDB for submissions and S3 for attachments. Governed by a Terraform GRC baseline and a seven-policy OPA suite implementing CMMC Level 2 controls against PHI data stores.",
+        "props": [
+          {
+            "name": "asset-type",
+            "value": "web-service"
+          }
+        ],
+        "control-implementations": [
+          {
+            "uuid": "33333333-3333-4333-8333-333333333333",
+            "source": "https://raw.githubusercontent.com/usnistgov/oscal-content/main/nist.gov/SP800-171/rev3/json/NIST_SP800-171_rev3_catalog.json",
+            "description": "CMMC Level 2 control implementations for the Acme Health Patient Intake API. Control IDs reference NIST SP 800-171 Rev 3. Corresponding CMMC Level 2 practice IDs (Rev 2) are noted in each implementation statement. The Rev 2-to-Rev 3 delta does not affect any of the eight gaps closed in this build.",
+            "implemented-requirements": [
+              {
+                "uuid": "44444444-4444-4444-8444-444444444444",
+                "control-id": "SP_800_171_03.01.05",
+                "description": "CMMC AC.L2-3.1.5 [GAP-07]: Employ the principle of least privilege, including for specific security functions and privileged accounts. The wildcard dynamodb:* and s3:* actions in aws_iam_role_policy.lambda_inline were replaced with the minimum required action set: dynamodb:PutItem, dynamodb:GetItem, s3:PutObject. KMS and SQS permissions are explicitly scoped to aws_kms_key.cmk and aws_sqs_queue.dlq respectively. Regression blocked by policies/iam_least_privilege.rego, which fails any plan where a Lambda inline policy contains a service wildcard.",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "value": "implemented"
+                  }
+                ]
+              },
+              {
+                "uuid": "55555555-5555-4555-8555-555555555555",
+                "control-id": "SP_800_171_03.03.01",
+                "description": "CMMC AU.L2-3.3.1 [GAP-08]: Create and retain system audit logs and records to enable monitoring, analysis, investigation, and reporting of unlawful or unauthorized system activity. Access logging is enabled on aws_apigatewayv2_stage.default with destination aws_cloudwatch_log_group.apigw (90-day retention). Route-level throttling (burst 100, rate 50 req/s) limits anomalous traffic. aws_wafv2_web_acl.intake with AWS Managed Rules Common Rule Set provides request-layer visibility and blocks common exploits. aws_cloudtrail.main is a multi-region trail with log-file validation writing to the immutable evidence vault, covering all control-plane API calls in the account. Regression blocked by policies/apigw_logging.rego.",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "value": "implemented"
+                  }
+                ]
+              },
+              {
+                "uuid": "66666666-6666-4666-8666-666666666666",
+                "control-id": "SP_800_171_03.08.09",
+                "description": "CMMC MP.L2-3.8.9 [GAP-04]: Protect the confidentiality of backup CUI at storage locations. S3 versioning is enabled on aws_s3_bucket.uploads (aws_s3_bucket_versioning.uploads) so PHI object overwrites are recoverable to any prior version. The evidence vault (aws_s3_bucket.vault) uses Object Lock in COMPLIANCE mode with a 365-day default retention, making audit artifacts immutable to all principals including the AWS root account. Regression blocked by policies/s3_versioning.rego.",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "value": "implemented"
+                  }
+                ]
+              },
+              {
+                "uuid": "77777777-7777-4777-8777-777777777777",
+                "control-id": "SP_800_171_03.13.01",
+                "description": "CMMC SC.L2-3.13.1 [GAP-05]: Monitor, control, and protect communications at the external boundaries and key internal boundaries of organizational systems. aws_lambda_function.intake runs inside aws_vpc.main using aws_subnet.private[*] and the egress-only aws_security_group.lambda (port 443 outbound only, no ingress). Gateway VPC endpoints for DynamoDB and S3 and an interface endpoint for CloudWatch Logs route all Lambda traffic through the private network without traversing the public internet. Regression blocked by policies/lambda_vpc.rego.",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "value": "implemented"
+                  }
+                ]
+              },
+              {
+                "uuid": "88888888-8888-4888-8888-888888888888",
+                "control-id": "SP_800_171_03.13.08",
+                "description": "CMMC SC.L2-3.13.8 [GAP-03]: Implement cryptographic mechanisms to prevent unauthorized disclosure of CUI during transmission unless otherwise protected by alternative physical safeguards. aws_s3_bucket_policy.uploads_tls denies all S3 requests where the condition aws:SecureTransport evaluates to false, enforcing TLS for every PHI object read and write. Regression blocked by policies/tls_in_transit.rego.",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "value": "implemented"
+                  }
+                ]
+              },
+              {
+                "uuid": "99999999-9999-4999-8999-999999999999",
+                "control-id": "SP_800_171_03.13.11",
+                "description": "CMMC SC.L2-3.13.11 [GAP-01, GAP-02]: Employ FIPS-validated cryptography when used to protect the confidentiality of CUI. aws_kms_key.cmk is a customer-managed AES-256 key with annual automatic rotation. It is set as the SSE-KMS key for aws_s3_bucket.uploads (aws_s3_bucket_server_side_encryption_configuration.uploads, bucket_key_enabled = true) and aws_dynamodb_table.intake (server_side_encryption block with kms_key_arn). Customer key custody means AWS cannot decrypt PHI at rest without explicit authorization from the key holder. Regression blocked by policies/encryption_cmk.rego.",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "value": "implemented"
+                  }
+                ]
+              },
+              {
+                "uuid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "control-id": "SP_800_171_03.14.06",
+                "description": "CMMC SI.L2-3.14.6 [GAP-06]: Monitor organizational systems, including the source of inbound communications traffic, to detect attacks and indicators of potential attacks. aws_lambda_function.intake is configured with X-Ray active tracing (tracing_config.mode = Active) for distributed trace visibility, a dead-letter queue (aws_sqs_queue.dlq, 14-day retention, encrypted with aws_kms_key.cmk) to capture and preserve failed invocations, and reserved_concurrent_executions = 10 to prevent resource exhaustion. Regression blocked by policies/lambda_observability.rego.",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "value": "implemented"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "back-matter": {
+      "resources": [
+        {
+          "uuid": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "title": "NIST SP 800-171 Rev 3 OSCAL Catalog",
+          "rlinks": [
+            {
+              "href": "https://raw.githubusercontent.com/usnistgov/oscal-content/main/nist.gov/SP800-171/rev3/json/NIST_SP800-171_rev3_catalog.json",
+              "media-type": "application/json"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
