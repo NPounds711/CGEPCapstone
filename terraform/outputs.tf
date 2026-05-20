@@ -24,3 +24,18 @@ output "vpc_id" {
 output "private_subnet_ids" {
   value = aws_subnet.private[*].id
 }
+
+output "kms_key_arn" {
+  value       = aws_kms_key.cmk.arn
+  description = "Customer-managed KMS key ARN."
+}
+
+output "evidence_vault_bucket" {
+  value       = aws_s3_bucket.vault.id
+  description = "Evidence vault bucket name."
+}
+
+output "cloudtrail_arn" {
+  value       = aws_cloudtrail.main.arn
+  description = "CloudTrail trail ARN."
+}
