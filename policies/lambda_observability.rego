@@ -11,8 +11,7 @@ package main
 import rego.v1
 
 has_dlq(resource) if {
-    dlq := resource.change.after.dead_letter_config[_]
-    dlq.target_arn != null
+    count(resource.change.after.dead_letter_config) > 0
 }
 
 has_active_tracing(resource) if {
