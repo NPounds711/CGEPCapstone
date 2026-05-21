@@ -1,6 +1,7 @@
 resource "aws_cloudwatch_log_group" "cloudtrail" {
   name              = "/aws/cloudtrail/${local.name_prefix}-${local.suffix}"
-  retention_in_days = 90
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.cmk.arn
 }
 
 resource "aws_iam_role" "cloudtrail" {
@@ -85,6 +86,8 @@ resource "aws_cloudtrail" "main" {
   enable_log_file_validation    = true
   cloud_watch_logs_group_arn    = "${aws_cloudwatch_log_group.cloudtrail.arn}:*"
   cloud_watch_logs_role_arn     = aws_iam_role.cloudtrail.arn
+  kms_key_id                    = aws_kms_key.cmk.arn
+  sns_topic_name                = aws_sns_topic.security_alerts.arn
 
   depends_on = [aws_s3_bucket_policy.vault]
 }

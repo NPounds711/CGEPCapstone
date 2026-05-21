@@ -60,7 +60,7 @@ resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.42.${count.index}.0/24"
   availability_zone       = data.aws_availability_zones.available.names[count.index]
-  map_public_ip_on_launch = true
+  map_public_ip_on_launch = false
 
   tags = { Name = "${local.name_prefix}-public-${count.index}" }
 }
@@ -115,6 +115,10 @@ resource "aws_dynamodb_table" "intake" {
   server_side_encryption {
     enabled     = true
     kms_key_arn = aws_kms_key.cmk.arn
+  }
+
+  point_in_time_recovery {
+    enabled = true
   }
 }
 
@@ -202,6 +206,8 @@ resource "aws_iam_role_policy" "lambda_inline" {
 }
 
 resource "aws_lambda_function" "intake" {
+  #checkov:skip=CKV_AWS_115:Sandbox account total concurrency too low to reserve without violating AWS 10-unreserved minimum
+  #checkov:skip=CKV_AWS_272:Code signing not required for this capstone sandbox workload
   function_name    = "${local.name_prefix}-handler-${local.suffix}"
   role             = aws_iam_role.lambda.arn
   handler          = "handler.handler"
@@ -209,6 +215,7 @@ resource "aws_lambda_function" "intake" {
   filename         = data.archive_file.handler.output_path
   source_code_hash = data.archive_file.handler.output_base64sha256
   timeout          = 10
+  kms_key_arn      = aws_kms_key.cmk.arn
 
   environment {
     variables = {
@@ -250,9 +257,11 @@ resource "aws_apigatewayv2_integration" "lambda" {
 }
 
 resource "aws_apigatewayv2_route" "intake" {
-  api_id    = aws_apigatewayv2_api.intake.id
-  route_key = "POST /intake"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  #checkov:skip=CKV_AWS_309:Public intake endpoint intentionally unauthenticated; throttling provides volumetric control
+  api_id             = aws_apigatewayv2_api.intake.id
+  route_key          = "POST /intake"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_stage" "default" {
