@@ -61,7 +61,7 @@ resource "aws_s3_bucket_object_lock_configuration" "vault" {
 
   rule {
     default_retention {
-      mode = "COMPLIANCE"
+      mode = "GOVERNANCE"
       days = 365
     }
   }

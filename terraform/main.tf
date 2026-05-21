@@ -210,7 +210,7 @@ resource "aws_lambda_function" "intake" {
   source_code_hash = data.archive_file.handler.output_base64sha256
   timeout          = 10
 
-  reserved_concurrent_executions = 10
+  reserved_concurrent_executions = 5
 
   environment {
     variables = {
@@ -259,11 +259,12 @@ resource "aws_apigatewayv2_route" "intake" {
 
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.intake.id
-  name        = "$default"
+  name        = "prod"
   auto_deploy = true
 
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.apigw.arn
+    format          = "$context.requestId $context.identity.sourceIp $context.requestTime $context.httpMethod $context.routeKey $context.status $context.protocol $context.responseLength"
   }
 
   default_route_settings {
