@@ -1,13 +1,14 @@
 # Terraform
 .terraform/
-.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
 !terraform.tfvars.example
 tfplan
 *.tfplan
+tfplan.json
 crash.log
+# .terraform.lock.hcl is intentionally committed (dependency pinning)
 
 # Lambda build
 terraform/lambda/handler.zip

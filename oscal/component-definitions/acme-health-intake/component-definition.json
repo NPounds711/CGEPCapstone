@@ -125,20 +125,6 @@
           }
         ]
       }
-    ],
-    "back-matter": {
-      "resources": [
-        {
-          "uuid": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-          "title": "NIST SP 800-171 Rev 3 OSCAL Catalog",
-          "rlinks": [
-            {
-              "href": "https://raw.githubusercontent.com/usnistgov/oscal-content/main/nist.gov/SP800-171/rev3/json/NIST_SP800-171_rev3_catalog.json",
-              "media-type": "application/json"
-            }
-          ]
-        }
-      ]
-    }
+    ]
   }
 }
