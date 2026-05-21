@@ -34,6 +34,7 @@ resource "aws_security_group" "vpc_endpoints" {
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = [aws_vpc.main.cidr_block]
+    description = "HTTPS from VPC CIDR to interface endpoints"
   }
 }
 
@@ -56,5 +57,6 @@ resource "aws_security_group" "lambda" {
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTPS egress to AWS service endpoints"
   }
 }
