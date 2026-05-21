@@ -1,5 +1,5 @@
 output "api_url" {
-  value       = "${aws_apigatewayv2_api.intake.api_endpoint}/intake"
+  value       = "${aws_apigatewayv2_stage.default.invoke_url}/intake"
   description = "POST /intake endpoint."
 }
 
