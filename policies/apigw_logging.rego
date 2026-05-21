@@ -11,9 +11,7 @@ package main
 import rego.v1
 
 has_access_logging(resource) if {
-    als := resource.change.after.access_log_settings[_]
-    als.destination_arn != null
-    als.destination_arn != ""
+    count(resource.change.after.access_log_settings) > 0
 }
 
 deny contains msg if {
