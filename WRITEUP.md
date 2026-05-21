@@ -35,7 +35,7 @@ The second reason is control coverage. Of the eight gaps in this starter, every 
 | GAP-03 | No TLS-enforcement bucket policy | SC.L2-3.13.8 |
 | GAP-04 | No S3 versioning | MP.L2-3.8.9 |
 | GAP-05 | Lambda outside the VPC | SC.L2-3.13.1 |
-| GAP-06 | No DLQ, no X-Ray, no concurrency limits | SI.L2-3.14.6 |
+| GAP-06 | No DLQ or X-Ray tracing | SI.L2-3.14.6 |
 | GAP-07 | Wildcard IAM permissions | AC.L2-3.1.5 |
 | GAP-08 | No API Gateway logging or throttling | AU.L2-3.3.1 |
 
@@ -59,27 +59,35 @@ Each gap is addressed in one or more of three layers. The choice of layer reflec
 
 **GAP-03 (TLS enforcement):** Addressed in Terraform via an `aws_s3_bucket_policy` that denies all requests where `aws:SecureTransport` is false. Also covered by `tls_in_transit.rego`. Control: SC.L2-3.13.8.
 
-**GAP-04 (Versioning):** Addressed in Terraform via `aws_s3_bucket_versioning`. The evidence vault bucket also has Object Lock in COMPLIANCE mode (see design decision below). OPA policy `s3_versioning.rego` enforces this going forward. Control: MP.L2-3.8.9.
+**GAP-04 (Versioning):** Addressed in Terraform via `aws_s3_bucket_versioning`. The evidence vault bucket also has Object Lock in GOVERNANCE mode (see design decision below). OPA policy `s3_versioning.rego` enforces this going forward. Control: MP.L2-3.8.9.
 
 **GAP-05 (Lambda VPC isolation):** Addressed in Terraform by adding a `vpc_config` block to `aws_lambda_function.intake`, placing it in the private subnet of the VPC the starter already provisions. No new VPC is created. The policy `lambda_vpc.rego` fails any plan that removes or omits the VPC config. Control: SC.L2-3.13.1.
 
-**GAP-06 (Observability):** Addressed in Terraform with reserved concurrency, a dead-letter queue backed by SQS, and X-Ray active tracing. The OPA policy `lambda_observability.rego` checks for the DLQ ARN and tracing config. Control: SI.L2-3.14.6.
+**GAP-06 (Observability):** Addressed in Terraform with a dead-letter queue backed by SQS and X-Ray active tracing. The OPA policy `lambda_observability.rego` checks for the DLQ and tracing config. Reserved concurrency was omitted — the sandbox account's total concurrency ceiling is too low to set a reservation without violating the AWS-enforced minimum of 10 unreserved executions; this is documented as a residual gap. Control: SI.L2-3.14.6.
 
 **GAP-07 (Least-privilege IAM):** Addressed in Terraform by replacing the wildcard `dynamodb:*` and `s3:*` permissions with scoped action lists: `dynamodb:PutItem`, `dynamodb:GetItem`, `s3:PutObject`. The OPA policy `iam_least_privilege.rego` fails any plan where a Lambda inline policy contains `*` as an action on the workload resources. Control: AC.L2-3.1.5.
 
-**GAP-08 (API Gateway logging/throttling):** Addressed in Terraform by enabling access logging on the API Gateway stage (writing to CloudWatch Logs), adding a default route throttle, and associating a WAF Web ACL. The OPA policy `apigw_logging.rego` checks for the access log destination ARN. Control: AU.L2-3.3.1.
+**GAP-08 (API Gateway logging/throttling):** Addressed in Terraform by enabling access logging on the API Gateway stage (writing to CloudWatch Logs) and adding default route throttling. The OPA policy `apigw_logging.rego` checks for the access log destination ARN. Control: AU.L2-3.3.1.
 
 ---
 
 ## 3. Design Decisions
 
-**Object Lock mode: COMPLIANCE**
+**Object Lock mode: GOVERNANCE**
 
-The evidence vault S3 bucket uses COMPLIANCE mode Object Lock with a 365-day retention period. GOVERNANCE mode would allow an IAM principal with `s3:BypassGovernanceRetention` to delete evidence — which undermines the chain-of-custody guarantee the vault is supposed to provide. In a 50-person company where the GRC engineer may also have elevated IAM permissions, GOVERNANCE mode is not sufficient. COMPLIANCE mode means no principal, including root, can delete a locked object before the retention period expires. The tradeoff is operational: if the pipeline produces a bad artifact, it cannot be deleted, only superseded by a corrected artifact in the same path. That is an acceptable operational cost for an immutable audit log.
+The evidence vault S3 bucket uses GOVERNANCE mode Object Lock with a 365-day retention period. COMPLIANCE mode was evaluated and rejected for this sandbox environment: COMPLIANCE mode prevented clean teardown of the vault bucket between test cycles because no principal — including root — can delete locked objects before the retention period expires. In a 30-day lab with repeated deploy-test-destroy cycles this creates orphaned buckets with objects locked until 2027. GOVERNANCE mode still provides meaningful immutability guarantees — objects cannot be deleted without the `s3:BypassGovernanceRetention` permission, which is not granted to the pipeline role — while remaining operationally manageable. In a production deployment with a dedicated evidence account, COMPLIANCE mode would be the correct choice.
 
 **Single AWS account**
 
-The evidence vault runs in the same AWS account as the workload. The cleaner architecture — a dedicated evidence account with cross-account S3 access — is acknowledged but deferred. A separate account eliminates the scenario where a compromised workload-account principal deletes evidence. In 30 days, with no existing account vending process, standing up a separate account introduces more operational risk (broken cross-account IAM, Terraform state split) than it mitigates. The Object Lock COMPLIANCE mode and the CloudTrail trail covering the evidence bucket provide compensating controls. This is a documented residual risk in the OSCAL component.
+The evidence vault runs in the same AWS account as the workload. The cleaner architecture — a dedicated evidence account with cross-account S3 access — is acknowledged but deferred. A separate account eliminates the scenario where a compromised workload-account principal deletes evidence. In 30 days, with no existing account vending process, standing up a separate account introduces more operational risk (broken cross-account IAM, Terraform state split) than it mitigates. The Object Lock GOVERNANCE mode and the CloudTrail trail covering the evidence bucket provide compensating controls. This is a documented residual risk in the OSCAL component.
+
+**Terraform state management: local state, documented choice**
+
+The Terraform configuration uses local state rather than a remote backend. A remote backend (S3 + DynamoDB lock table) would be the correct choice for a team environment — it prevents concurrent applies and provides state history. For a single-engineer 30-day capstone with no collaborators, local state is acceptable. The tradeoff is that state is not preserved between GitHub Actions runs; each pipeline apply starts from empty state. This means the pipeline is idempotent but not incremental: a second push to main would attempt to create all resources again and fail on existing resource conflicts. The practical mitigation is that the pipeline is triggered once per submission cycle, not continuously. A production deployment would add an S3 backend block and the corresponding DynamoDB lock table.
+
+**Continuous monitoring: CloudWatch metric filters and alarms**
+
+Four CloudWatch metric filters are wired to the CloudTrail log group in `monitoring.tf`, each targeting a specific CMMC control scenario: root account usage (AU.L2-3.3.1, IA.L2-3.5.3), IAM policy changes (AC.L2-3.1.5), CloudTrail configuration changes (AU.L2-3.3.1), and KMS key deletion (SC.L2-3.13.11). Each filter has a paired CloudWatch alarm that routes to an SNS topic (`security-alerts`). This provides real-time drift detection against the four highest-risk event categories for this workload — any of these events firing in a live environment would indicate either an operational error or an active compromise.
 
 **Pipeline apply gate: merge to main, no manual approval**
 
@@ -100,7 +108,7 @@ The OSCAL component implements the following CMMC L2 practice families: AC (Acce
 ## 5. Trade-offs Accepted
 
 - **HIPAA breach notification is not automated.** The OSCAL component documents the control as policy-satisfied and points to an incident response runbook placeholder. In a production deployment this would be a 72-hour notification workflow wired to GuardDuty findings.
-- **No WAF managed rule groups beyond core.** The WAF ACL blocks common exploits via the AWS Managed Rules Common Rule Set. Application-specific rules (rate limiting by patient ID, bot control) are not implemented. They are flagged as sprint-backlog items.
+- **No WAF.** WAFv2 WebACL association with API Gateway v2 HTTP API stages fails in this sandbox — the stage ARN format used by HTTP APIs (empty account-ID field) is rejected by the WAFv2 `AssociateWebACL` API. The throttling controls on the API Gateway stage (burst 100, rate 50) provide a compensating control for volumetric abuse. WAF would be re-introduced using a Regional WAFv2 ACL in a production environment where the API Gateway is fronted by an ALB.
 - **CloudWatch Logs, not a SIEM.** API Gateway and Lambda logs go to CloudWatch. A production compliance posture would ship logs to a SIEM (Splunk, Datadog Security) for correlation. That integration is out of scope for 30 days.
 - **No encryption in transit validation for DynamoDB client.** The Lambda runtime uses the AWS SDK default, which uses TLS. There is no Rego policy enforcing an SDK configuration flag because the Terraform plan does not expose SDK transport settings. This is documented as a detective gap — CloudTrail data events would surface any unexpected plaintext call, but that has not been tested.
 
