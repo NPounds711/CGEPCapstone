@@ -45,7 +45,7 @@ terraform show -json tfplan > tfplan.json
 conftest test tfplan.json --policy policies/
 ```
 
-All five policies must pass with no violations.
+All seven policies must pass with no violations.
 
 ### 3. Verify the OSCAL component
 
