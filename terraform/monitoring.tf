@@ -3,6 +3,25 @@ resource "aws_sns_topic" "security_alerts" {
   kms_master_key_id = aws_kms_key.cmk.id
 }
 
+resource "aws_sns_topic_policy" "security_alerts" {
+  arn = aws_sns_topic.security_alerts.arn
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudTrailPublish"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action   = "SNS:Publish"
+        Resource = aws_sns_topic.security_alerts.arn
+      }
+    ]
+  })
+}
+
 resource "aws_cloudwatch_log_metric_filter" "root_account_usage" {
   name           = "${local.name_prefix}-root-usage-${local.suffix}"
   log_group_name = aws_cloudwatch_log_group.cloudtrail.name

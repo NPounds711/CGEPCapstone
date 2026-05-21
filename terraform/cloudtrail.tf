@@ -89,5 +89,5 @@ resource "aws_cloudtrail" "main" {
   kms_key_id                    = aws_kms_key.cmk.arn
   sns_topic_name                = aws_sns_topic.security_alerts.arn
 
-  depends_on = [aws_s3_bucket_policy.vault]
+  depends_on = [aws_s3_bucket_policy.vault, aws_sns_topic_policy.security_alerts]
 }
