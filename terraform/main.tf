@@ -210,8 +210,6 @@ resource "aws_lambda_function" "intake" {
   source_code_hash = data.archive_file.handler.output_base64sha256
   timeout          = 10
 
-  reserved_concurrent_executions = 5
-
   environment {
     variables = {
       INTAKE_TABLE  = aws_dynamodb_table.intake.name
