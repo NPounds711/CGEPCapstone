@@ -4,27 +4,60 @@
 **Primary Framework:** CMMC Level 2 (NIST SP 800-171 Rev 2)  
 **Secondary Frameworks:** HIPAA Security Rule, SOC 2 Type II (residual coverage)
 
+> This repository is forked from `GRCEngClub/cgep-app-starter`, an intentionally
+> non-compliant workload designed to be governed. All code under `terraform/`
+> (except the original `main.tf`, `variables.tf`, `outputs.tf`, and
+> `lambda/handler.py`), `policies/`, `oscal/`, `.github/workflows/`, and the
+> top-level `WRITEUP.md`, `WORKLOAD.md`, and `Makefile` is original capstone
+> work.
+
 ## Repository layout
 
 ```
 CGEPCapstone/
 ├── WRITEUP.md                          # Framework justification and design decisions
+├── WORKLOAD.md                         # Workload narrative
 ├── GAPS.md                             # Named flaws in the starter workload
 ├── FRAMEWORKS.md                       # Framework mapping reference
+├── LICENSE                             # MIT
+├── Makefile                            # Grader-facing convenience targets
 ├── terraform/
-│   ├── main.tf                         # Original starter workload (do not modify)
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── baseline/                       # GRC overlay: KMS, evidence vault, CloudTrail,
-│                                       # SSE-KMS overrides, TLS policy, versioning,
-│                                       # Lambda VPC/DLQ/X-Ray, API GW logging, IAM scoping
-├── policies/                           # OPA/Rego policies (one per gap family)
-├── scripts/                            # Helper scripts (sign, upload, verify)
+│   ├── main.tf                         # Original starter workload (untouched)
+│   ├── variables.tf                    # Original starter variables
+│   ├── outputs.tf                      # Original starter outputs
+│   ├── lambda/handler.py               # Original starter Lambda source
+│   ├── kms.tf                          # GRC overlay: customer-managed KMS keys
+│   ├── s3_baseline.tf                  # GRC overlay: SSE-KMS, TLS deny, versioning, vault
+│   ├── cloudtrail.tf                   # GRC overlay: multi-region trail + log-file validation
+│   ├── networking_baseline.tf          # GRC overlay: VPC, private subnets, security groups
+│   ├── lambda_baseline.tf              # GRC overlay: VPC config, DLQ, X-Ray, IAM scoping
+│   ├── apigw_baseline.tf               # GRC overlay: access logging, throttling
+│   └── monitoring.tf                   # GRC overlay: CloudWatch metric filters + alarms
+├── policies/                           # OPA/Rego policies (7 policies, 7 test files)
+├── scripts/                            # Helper scripts
+├── docs/
+│   └── verification.md                 # Tier 0 static-analysis evidence
 ├── oscal/
-│   ├── component-definitions/          # OSCAL component-definition.json
+│   ├── component-definitions/          # OSCAL component-definition.json (trestle VALID)
 │   └── profiles/                       # OSCAL profile selecting CMMC L2 controls
-└── .github/workflows/                  # CI/CD pipeline: plan, conftest, apply, sign, vault
+├── test/                               # Smoke test against deployed API
+└── .github/workflows/                  # CI: scan -> plan -> conftest -> apply -> sign -> vault
 ```
+
+## Prerequisites
+
+- Terraform `>= 1.6` (CI pins `1.6.6`)
+- AWS CLI v2, with a profile named `sandbox` configured for the target account
+- Python 3.10+ (for `compliance-trestle`)
+- `conftest` (CI pins `0.51.0`) or `opa` for the policy suite
+- Optional for Tier 0 static analysis: `checkov`, `tflint`, `gitleaks`, `semgrep`
+
+## Static-analysis evidence
+
+See [docs/verification.md](docs/verification.md) for the most recent local
+results of `terraform fmt`, `terraform validate`, `checkov`, `tflint`,
+`gitleaks`, `semgrep`, and `opa test` against this repository. The CI pipeline
+re-runs the same scanners on every PR and push.
 
 ## Grader verification
 
